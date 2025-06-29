@@ -1,40 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .nft-animation-container {
-      position: relative;
+    /* Scoped styles to prevent conflicts */
+    .namedrop-container {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: inherit;
+      z-index: 1000;
     }
     
-    .glow-orb {
+    .namedrop-orb {
       position: absolute;
-      width: 120px;
-      height: 120px;
+      width: 100px;
+      height: 100px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
-      filter: blur(10px);
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6);
+      transform: scale(0.9);
       opacity: 0;
       transition: opacity 0.3s ease;
-      z-index: 10;
     }
     
-    .ripple {
+    .namedrop-ripple {
       position: absolute;
+      width: 100px;
+      height: 100px;
       border-radius: 50%;
-      background: rgba(255, 255, 255, 0.2);
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.4);
       transform: scale(0);
-      pointer-events: none;
-      z-index: 5;
+      opacity: 0;
     }
     
-    .flash-effect {
+    .namedrop-flash {
       position: absolute;
       top: 0;
       left: 0;
@@ -43,134 +51,132 @@
       background: rgba(255, 255, 255, 0.8);
       opacity: 0;
       pointer-events: none;
-      z-index: 15;
     }
     
-    @keyframes ripple-animation {
-      to {
-        transform: scale(4);
-        opacity: 0;
-      }
+    /* Animation keyframes */
+    @keyframes orb-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6); transform: scale(0.9); }
+      50% { box-shadow: 0 0 30px 10px rgba(255, 255, 255, 0.3); transform: scale(1.1); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); transform: scale(0.9); }
     }
     
-    @keyframes flash-animation {
-      0% { opacity: 0; }
-      20% { opacity: 0.7; }
-      100% { opacity: 0; }
+    @keyframes ripple-expand {
+      0% { transform: scale(0.8); opacity: 0.8; }
+      100% { transform: scale(3); opacity: 0; }
+    }
+    
+    @keyframes flash {
+      0% { opacity: 0; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.05); }
+      100% { opacity: 0; transform: scale(1.1); }
     }
   </style>
 </head>
 <body>
-  <!-- This is the element you should place inside your .business-card -->
-  <div class="nft-animation-container" id="nftAnimation">
-    <div class="glow-orb" id="glowOrb"></div>
-    <div class="flash-effect" id="flashEffect"></div>
+  <!-- Place this inside your .business-card element -->
+  <div class="namedrop-container">
+    <div class="namedrop-orb"></div>
+    <div class="namedrop-ripple"></div>
+    <div class="namedrop-flash"></div>
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const container = document.getElementById('nftAnimation');
-      const glowOrb = document.getElementById('glowOrb');
-      const flashEffect = document.getElementById('flashEffect');
-      
-      let animationTimeout;
-      let isAnimating = false;
-      
-      // Set up event listeners for both mouse and touch
-      container.addEventListener('mouseenter', startAnimation);
-      container.addEventListener('touchstart', startAnimation);
-      container.addEventListener('mouseleave', resetAnimation);
-      
-      function startAnimation(e) {
-        if (isAnimating) return;
-        isAnimating = true;
+    (function() {
+      // Wait for DOM to be ready
+      document.addEventListener('DOMContentLoaded', function() {
+        const container = document.querySelector('.namedrop-container');
+        const orb = container.querySelector('.namedrop-orb');
+        const ripple = container.querySelector('.namedrop-ripple');
+        const flash = container.querySelector('.namedrop-flash');
         
-        // Prevent default for touch to avoid scrolling
-        if (e.type === 'touchstart') {
-          e.preventDefault();
+        // Find the business card parent
+        const businessCard = document.querySelector('.business-card');
+        if (!businessCard) {
+          console.warn('Could not find .business-card element');
+          return;
         }
         
-        // Show the glow orb
-        glowOrb.style.opacity = '0.8';
+        // Make sure business card has relative positioning
+        businessCard.style.position = 'relative';
         
-        // Create ripple effects
-        createRipple();
-        setTimeout(createRipple, 300);
-        setTimeout(createRipple, 600);
+        // Move container inside business card
+        businessCard.appendChild(container);
         
-        // Complete the animation after a delay
-        animationTimeout = setTimeout(() => {
-          completeAnimation();
-        }, 1500);
-      }
-      
-      function createRipple() {
-        const ripple = document.createElement('div');
-        ripple.className = 'ripple';
-        ripple.style.width = '100px';
-        ripple.style.height = '100px';
-        ripple.style.top = '50%';
-        ripple.style.left = '50%';
-        ripple.style.transform = 'translate(-50%, -50%) scale(0)';
-        container.appendChild(ripple);
+        // Animation states
+        let isActive = false;
+        let animationFrame;
         
-        // Animate the ripple
-        setTimeout(() => {
-          ripple.style.animation = 'ripple-animation 1.2s ease-out forwards';
+        // Event listeners
+        businessCard.addEventListener('mouseenter', startAnimation);
+        businessCard.addEventListener('touchstart', handleTouch);
+        businessCard.addEventListener('mouseleave', resetAnimation);
+        
+        function startAnimation() {
+          if (isActive) return;
+          isActive = true;
           
-          // Remove ripple after animation
+          // Activate orb
+          orb.style.opacity = '1';
+          orb.style.animation = 'orb-pulse 1.5s ease-in-out infinite';
+          
+          // Start ripple animation
+          ripple.style.animation = 'ripple-expand 2s ease-out infinite';
+          
+          // Trigger vibration (short pulses)
+          if (navigator.vibrate) {
+            navigator.vibrate([50, 30, 50, 30, 50]);
+          }
+          
+          // Complete after 2 seconds
+          setTimeout(completeAnimation, 2000);
+        }
+        
+        function completeAnimation() {
+          // Flash effect
+          flash.style.animation = 'flash 0.6s ease-out forwards';
+          
+          // Stop ongoing animations
+          orb.style.animation = '';
+          ripple.style.animation = '';
+          
+          // Fade out orb
+          orb.style.opacity = '0';
+          
+          // Reset after flash completes
           setTimeout(() => {
-            ripple.remove();
-          }, 1200);
-        }, 10);
-      }
-      
-      function completeAnimation() {
-        // Trigger vibration if supported
-        if ('vibrate' in navigator) {
-          navigator.vibrate([100, 50, 100]);
+            flash.style.animation = '';
+            isActive = false;
+          }, 600);
         }
         
-        // Flash effect
-        flashEffect.style.animation = 'flash-animation 0.8s ease-out forwards';
-        
-        // Hide glow orb
-        glowOrb.style.opacity = '0';
-        
-        // Reset after flash
-        setTimeout(() => {
-          isAnimating = false;
-          flashEffect.style.animation = '';
-        }, 800);
-      }
-      
-      function resetAnimation() {
-        if (isAnimating) {
-          clearTimeout(animationTimeout);
-          glowOrb.style.opacity = '0';
-          isAnimating = false;
+        function resetAnimation() {
+          if (!isActive) return;
           
-          // Remove any remaining ripples
-          const ripples = document.querySelectorAll('.ripple');
-          ripples.forEach(ripple => ripple.remove());
+          // Immediately stop all animations
+          orb.style.animation = '';
+          ripple.style.animation = '';
+          flash.style.animation = '';
+          
+          orb.style.opacity = '0';
+          isActive = false;
         }
-      }
-      
-      // Make container responsive to parent size
-      function updateSize() {
-        const parent = container.parentElement;
-        if (parent) {
-          container.style.width = parent.clientWidth + 'px';
-          container.style.height = parent.clientHeight + 'px';
+        
+        function handleTouch(e) {
+          e.preventDefault();
+          startAnimation();
         }
-      }
-      
-      // Initial size update
-      updateSize();
-      
-      // Update on window resize
-      window.addEventListener('resize', updateSize);
-    });
+        
+        // Make responsive to parent size
+        function updateSize() {
+          container.style.width = businessCard.clientWidth + 'px';
+          container.style.height = businessCard.clientHeight + 'px';
+        }
+        
+        // Initial setup
+        updateSize();
+        window.addEventListener('resize', updateSize);
+      });
+    })();
   </script>
 </body>
 </html>
